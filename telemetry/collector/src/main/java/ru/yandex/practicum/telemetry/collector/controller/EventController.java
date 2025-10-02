@@ -37,6 +37,7 @@ public class EventController {
 
     @PostMapping("/sensors")
     public void collectSensorEvent(@Valid @RequestBody SensorEvent event) {
+        log.info("Sensor json: {}", event.toString());
         SensorEventHandler sensorEventHandler = sensorEventHandlers.get(event.getType());
         if (sensorEventHandler == null) {
             throw new IllegalArgumentException("Подходящий обработчик для события датчика " + event.getType() +
@@ -47,6 +48,7 @@ public class EventController {
 
     @PostMapping("/hubs")
     public void collectHubEvent(@Valid @RequestBody HubEvent event) {
+        log.info("Hub json: {}", event.toString());
         HubEventHandler hubEventHandler = hubEventHandlers.get(event.getType());
         if (hubEventHandler == null) {
             throw new IllegalArgumentException("Подходящий обработчик для события хаба " + event.getType() +

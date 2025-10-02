@@ -37,6 +37,7 @@ public abstract class BaseHubEventHandler<T extends SpecificRecordBase> implemen
                             topic, metadata.partition(), metadata.offset());
                 }
             });
+            producer.flush();
         } catch (Exception e) {
             log.error("Ошибка обработки события", e);
         }

@@ -38,6 +38,7 @@ public abstract class BaseSensorEventHandler<T extends SpecificRecordBase> imple
                             topic, metadata.partition(), metadata.offset());
                 }
             });
+            producer.flush();
         } catch (Exception e) {
             log.error("Ошибка обработки события", e);
         }

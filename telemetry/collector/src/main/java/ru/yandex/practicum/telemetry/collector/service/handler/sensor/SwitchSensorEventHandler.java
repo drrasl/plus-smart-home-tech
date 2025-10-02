@@ -23,7 +23,7 @@ public class SwitchSensorEventHandler extends BaseSensorEventHandler<SwitchSenso
     protected SwitchSensorAvro mapToAvro(SensorEvent sensorEvent) {
         SwitchSensorEvent event = (SwitchSensorEvent) sensorEvent;
         return SwitchSensorAvro.newBuilder()
-                .setState(event.isState())
+                .setState(event.getState())
                 .build();
     }
 }

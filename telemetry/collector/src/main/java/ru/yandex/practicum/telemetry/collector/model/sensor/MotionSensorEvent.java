@@ -13,8 +13,8 @@ import lombok.ToString;
 public class MotionSensorEvent extends SensorEvent {
     @NotNull
     private int linkQuality;
-    @Builder.Default
-    private boolean motion = false;
+    @NotNull
+    private Boolean motion;
     @NotNull
     private int voltage;
 

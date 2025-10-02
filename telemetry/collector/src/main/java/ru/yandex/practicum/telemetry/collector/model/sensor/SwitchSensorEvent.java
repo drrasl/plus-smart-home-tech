@@ -1,17 +1,17 @@
 package ru.yandex.practicum.telemetry.collector.model.sensor;
 
-import lombok.Builder;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.ToString;
+import jakarta.validation.constraints.NotNull;
+import lombok.*;
 
 @Getter
 @Setter
 @ToString
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class SwitchSensorEvent extends SensorEvent {
-    @Builder.Default
-    private boolean state = false;
+    @NotNull
+    private Boolean state;
 
     @Override
     public SensorEventType getType() {
