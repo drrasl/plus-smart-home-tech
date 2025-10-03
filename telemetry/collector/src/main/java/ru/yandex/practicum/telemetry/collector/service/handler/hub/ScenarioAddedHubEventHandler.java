@@ -1,5 +1,6 @@
 package ru.yandex.practicum.telemetry.collector.service.handler.hub;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import ru.yandex.practicum.kafka.telemetry.event.ScenarioAddedEventAvro;
 import ru.yandex.practicum.telemetry.collector.model.hub.HubEvent;
@@ -13,8 +14,9 @@ import static ru.yandex.practicum.telemetry.collector.service.handler.hub.mapper
 @Service
 public class ScenarioAddedHubEventHandler extends BaseHubEventHandler<ScenarioAddedEventAvro> {
 
-    public ScenarioAddedHubEventHandler(KafkaEventProducer kafkaEventProducer) {
-        super(kafkaEventProducer);
+    public ScenarioAddedHubEventHandler(KafkaEventProducer kafkaEventProducer,
+                                        @Value("${kafka.topic.hub}") String topic) {
+        super(kafkaEventProducer, topic);
     }
 
     @Override

@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.avro.specific.SpecificRecordBase;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.springframework.beans.factory.annotation.Value;
 import ru.yandex.practicum.kafka.telemetry.event.SensorEventAvro;
 import ru.yandex.practicum.telemetry.collector.model.sensor.SensorEvent;
 import ru.yandex.practicum.telemetry.collector.service.handler.KafkaEventProducer;
@@ -14,7 +15,7 @@ import ru.yandex.practicum.telemetry.collector.service.handler.KafkaEventProduce
 public abstract class BaseSensorEventHandler<T extends SpecificRecordBase> implements SensorEventHandler {
 
     protected final KafkaEventProducer kafkaEventProducer;
-    protected final String topic = "telemetry.sensors.v1";
+    protected final String topic;
 
     @Override
     public void handle(SensorEvent sensorEvent) {

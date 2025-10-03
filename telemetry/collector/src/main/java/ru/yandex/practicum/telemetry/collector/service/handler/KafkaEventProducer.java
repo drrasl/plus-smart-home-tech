@@ -7,13 +7,19 @@ import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.springframework.stereotype.Component;
 import ru.yandex.practicum.kafka.serializer.GeneralAvroSerializer;
+import ru.yandex.practicum.telemetry.collector.config.KafkaProducerProperties;
 
 import java.util.Properties;
 
 @Component
 public class KafkaEventProducer {
 
+    private final KafkaProducerProperties kafkaProducerProperties;
     private Producer<String, SpecificRecordBase> producer;
+
+    public KafkaEventProducer(KafkaProducerProperties kafkaProducerProperties) {
+        this.kafkaProducerProperties = kafkaProducerProperties;
+    }
 
     public Producer<String, SpecificRecordBase> getProducer() {
         if (producer == null) {
@@ -24,18 +30,16 @@ public class KafkaEventProducer {
 
     private void initProducer() {
         Properties config = new Properties();
-        config.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
-        config.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer");
-        config.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, GeneralAvroSerializer.class);
+        config.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaProducerProperties.getBootstrapServers());
+        config.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, kafkaProducerProperties.getKeySerializer());
+        config.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, kafkaProducerProperties.getValueSerializer());
 
-        config.put(ProducerConfig.ACKS_CONFIG, "all"); // Ждем подтверждения от всех реплик
-        config.put(ProducerConfig.RETRIES_CONFIG, 3); // Количество повторных попыток
-        config.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 1); // Для строгой ordering
+        config.put(ProducerConfig.ACKS_CONFIG, kafkaProducerProperties.getAcks());
+        config.put(ProducerConfig.RETRIES_CONFIG, kafkaProducerProperties.getRetries());
+        config.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, kafkaProducerProperties.getMaxInFlightRequestsPerConnection());
 
-        config.put(ProducerConfig.LINGER_MS_CONFIG, 10); // Ждем до 10ms для батчинга
-        config.put(ProducerConfig.BATCH_SIZE_CONFIG, 16384); // Размер батча 16KB
-
-
+        config.put(ProducerConfig.LINGER_MS_CONFIG, kafkaProducerProperties.getLingerMs());
+        config.put(ProducerConfig.BATCH_SIZE_CONFIG, kafkaProducerProperties.getBatchSize());
 
         producer = new KafkaProducer<>(config);
     }

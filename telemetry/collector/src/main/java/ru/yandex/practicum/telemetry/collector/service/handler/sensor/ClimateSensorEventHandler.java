@@ -1,5 +1,6 @@
 package ru.yandex.practicum.telemetry.collector.service.handler.sensor;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import ru.yandex.practicum.kafka.telemetry.event.ClimateSensorAvro;
 import ru.yandex.practicum.telemetry.collector.model.sensor.ClimateSensorEvent;
@@ -10,8 +11,9 @@ import ru.yandex.practicum.telemetry.collector.service.handler.KafkaEventProduce
 @Service
 public class ClimateSensorEventHandler extends BaseSensorEventHandler<ClimateSensorAvro> {
 
-    public ClimateSensorEventHandler(KafkaEventProducer kafkaEventProducer) {
-        super(kafkaEventProducer);
+    public ClimateSensorEventHandler(KafkaEventProducer kafkaEventProducer,
+                                     @Value("${kafka.topic.sensor}") String topic) {
+        super(kafkaEventProducer, topic);
     }
 
     @Override

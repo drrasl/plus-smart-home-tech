@@ -14,7 +14,7 @@ import ru.yandex.practicum.telemetry.collector.service.handler.KafkaEventProduce
 public abstract class BaseHubEventHandler<T extends SpecificRecordBase> implements HubEventHandler {
 
     protected final KafkaEventProducer kafkaEventProducer;
-    protected final String topic = "telemetry.hubs.v1";
+    protected final String topic;
 
     @Override
     public void handle(HubEvent hubEvent) {

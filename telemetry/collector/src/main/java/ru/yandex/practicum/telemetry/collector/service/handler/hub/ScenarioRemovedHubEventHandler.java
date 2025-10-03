@@ -1,22 +1,19 @@
 package ru.yandex.practicum.telemetry.collector.service.handler.hub;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import ru.yandex.practicum.kafka.telemetry.event.ScenarioAddedEventAvro;
 import ru.yandex.practicum.kafka.telemetry.event.ScenarioRemovedEventAvro;
 import ru.yandex.practicum.telemetry.collector.model.hub.HubEvent;
 import ru.yandex.practicum.telemetry.collector.model.hub.HubEventType;
-import ru.yandex.practicum.telemetry.collector.model.hub.ScenarioAddedEvent;
 import ru.yandex.practicum.telemetry.collector.model.hub.ScenarioRemovedEvent;
 import ru.yandex.practicum.telemetry.collector.service.handler.KafkaEventProducer;
-
-import static ru.yandex.practicum.telemetry.collector.service.handler.hub.mapper.ClassToAvroMapper.mapActionsToAvro;
-import static ru.yandex.practicum.telemetry.collector.service.handler.hub.mapper.ClassToAvroMapper.mapConditionsToAvro;
 
 @Service
 public class ScenarioRemovedHubEventHandler extends BaseHubEventHandler<ScenarioRemovedEventAvro> {
 
-    public ScenarioRemovedHubEventHandler(KafkaEventProducer kafkaEventProducer) {
-        super(kafkaEventProducer);
+    public ScenarioRemovedHubEventHandler(KafkaEventProducer kafkaEventProducer,
+                                          @Value("${kafka.topic.hub}") String topic) {
+        super(kafkaEventProducer, topic);
     }
 
     @Override
