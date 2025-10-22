@@ -136,7 +136,4 @@ public class AggregationStarter {
             log.info("Снепшот {} не обновился", sensorEventAvro);
         }
     }
-
-
-
 }
