@@ -25,6 +25,7 @@ import java.time.Instant;
 @Getter
 @Setter
 @ToString
+@Deprecated
 public abstract class SensorEvent {
 
     @NotBlank
