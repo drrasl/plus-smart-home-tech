@@ -65,6 +65,7 @@ public class SnapshotProcessor {
             }
         } catch (WakeupException ignores) {
             // игнорируем - закрываем консьюмер и продюсер в блоке finally
+            log.info("Получен сигнал завершения работы. WakeupException. Analyzer. SnapshotProcessor");
         } catch (Exception e) {
             log.error("Ошибка во время обработки событий от хабов", e);
         } finally {

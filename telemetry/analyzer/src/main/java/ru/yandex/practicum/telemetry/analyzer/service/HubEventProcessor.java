@@ -63,6 +63,7 @@ public class HubEventProcessor implements Runnable {
             }
         } catch (WakeupException ignores) {
             // игнорируем - закрываем консьюмер и продюсер в блоке finally
+            log.info("Получен сигнал завершения работы. WakeupException. Analyzer. HubEventProcessor");
         } catch (Exception e) {
             log.error("Ошибка во время обработки сценариев от хабов", e);
         } finally {
