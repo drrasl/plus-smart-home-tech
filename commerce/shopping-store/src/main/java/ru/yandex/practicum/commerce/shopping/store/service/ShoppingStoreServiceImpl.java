@@ -1,0 +1,134 @@
+package ru.yandex.practicum.commerce.shopping.store.service;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import ru.yandex.practicum.commerce.dto.shopping.store.ProductCategory;
+import ru.yandex.practicum.commerce.dto.shopping.store.ProductDto;
+import ru.yandex.practicum.commerce.dto.shopping.store.ProductState;
+import ru.yandex.practicum.commerce.shopping.store.dal.ProductRepository;
+import ru.yandex.practicum.commerce.shopping.store.exception.ProductNotFoundBusinessException;
+import ru.yandex.practicum.commerce.shopping.store.mapper.ProductMapper;
+import ru.yandex.practicum.commerce.shopping.store.model.ProductEntity;
+import ru.yandex.practicum.commerce.shopping.store.model.SetProductQuantityStateRequest;
+
+import java.util.List;
+import java.util.UUID;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class ShoppingStoreServiceImpl implements ShoppingStoreService {
+
+    private final ProductRepository productRepository;
+
+    @Override
+    public Page<ProductDto> getProducts(ProductCategory category, int page, int size, List<String> sort) {
+        log.debug("Getting products for category: {}, page: {}, size: {}, sort: {}",
+                category, page, size, sort);
+
+        Pageable pageable = createPageable(page, size, sort);
+        Page<ProductEntity> productPage = productRepository.findByProductCategoryAndProductState(
+                category, ProductState.ACTIVE, pageable);
+
+        return productPage.map(ProductMapper::toDto);
+    }
+
+    @Override
+    @Transactional
+    public ProductDto createProduct(ProductDto productDto) {
+        log.debug("Creating new product: {}", productDto.getProductName());
+
+        ProductEntity productEntity = ProductMapper.toEntity(productDto);
+        ProductEntity savedEntity = productRepository.save(productEntity);
+
+        log.info("Created new product with id: {}", savedEntity.getProductId());
+        return ProductMapper.toDto(savedEntity);
+    }
+
+    @Override
+    @Transactional
+    public ProductDto updateProduct(ProductDto productDto) {
+        log.debug("Updating product with id: {}", productDto.getProductId());
+
+        UUID productId = productDto.getProductId();
+        ProductEntity existingProduct = ifProductExistedInDb(productId);
+
+        ProductMapper.updateEntityFromDto(existingProduct, productDto);
+        ProductEntity updatedProduct = productRepository.save(existingProduct);
+
+        log.info("Updated product with id: {}", productId);
+        return ProductMapper.toDto(updatedProduct);
+    }
+
+    @Override
+    @Transactional
+    public boolean removeProductFromStore(UUID productId) {
+        log.debug("Removing product from store with id: {}", productId);
+
+        ProductEntity product = ifProductExistedInDb(productId);
+
+        product.setProductState(ProductState.DEACTIVATE);
+        productRepository.save(product);
+
+        log.info("Product with id: {} deactivated", productId);
+        return true;
+    }
+
+    @Override
+    @Transactional
+    public boolean setProductQuantityState(SetProductQuantityStateRequest request) {
+        log.debug("Setting quantity state for product: {} to {}",
+                request.getProductId(), request.getQuantityState());
+
+        ProductEntity product = ifProductExistedInDb(request.getProductId());
+
+        product.setQuantityState(request.getQuantityState());
+        productRepository.save(product);
+
+        log.info("Quantity state updated for product: {} to {}",
+                request.getProductId(), request.getQuantityState());
+        return true;
+    }
+
+    @Override
+    public ProductDto getProduct(UUID productId) {
+        log.debug("Getting product with id: {}", productId);
+
+        ProductEntity product = ifProductExistedInDb(productId);
+
+        return ProductMapper.toDto(product);
+    }
+
+    // Вспомогательные методы
+    private Pageable createPageable(int page, int size, List<String> sort) {
+        if (sort == null || sort.isEmpty()) {
+            return PageRequest.of(page, size);
+        }
+
+        List<Sort.Order> orders = sort.stream()
+                .map(this::parseSort)
+                .toList();
+
+        return PageRequest.of(page, size, Sort.by(orders));
+    }
+
+    private Sort.Order parseSort(String sortParam) {
+        String[] parts = sortParam.split(",");
+        if (parts.length == 2) {
+            return new Sort.Order(Sort.Direction.fromString(parts[1]), parts[0]);
+        }
+        return new Sort.Order(Sort.Direction.ASC, parts[0]);
+    }
+
+    private ProductEntity ifProductExistedInDb(UUID productId) {
+        return productRepository.findById(productId)
+                .orElseThrow(() -> new ProductNotFoundBusinessException(productId));
+    }
+}
