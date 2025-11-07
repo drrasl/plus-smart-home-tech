@@ -18,5 +18,9 @@ public interface ProductRepository extends JpaRepository<ProductEntity, UUID> {
             ProductState productState,
             Pageable pageable);
 
+    Page<ProductEntity> findByProductCategory(
+            ProductCategory productCategory,
+            Pageable pageable);
+
     boolean existsByProductIdAndProductState(UUID productId, ProductState productState);
 }

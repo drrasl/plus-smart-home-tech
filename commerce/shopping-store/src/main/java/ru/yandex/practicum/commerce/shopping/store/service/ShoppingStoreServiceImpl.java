@@ -17,8 +17,7 @@ import ru.yandex.practicum.commerce.shopping.store.mapper.ProductMapper;
 import ru.yandex.practicum.commerce.shopping.store.model.ProductEntity;
 import ru.yandex.practicum.commerce.shopping.store.model.SetProductQuantityStateRequest;
 
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @Slf4j
 @Service
@@ -29,14 +28,15 @@ public class ShoppingStoreServiceImpl implements ShoppingStoreService {
     private final ProductRepository productRepository;
 
     @Override
-    public Page<ProductDto> getProducts(ProductCategory category, int page, int size, List<String> sort) {
+    public Page<ProductDto> getProducts(ProductCategory category, int page, int size, String sort) {
         log.debug("Getting products for category: {}, page: {}, size: {}, sort: {}",
                 category, page, size, sort);
 
         Pageable pageable = createPageable(page, size, sort);
-        Page<ProductEntity> productPage = productRepository.findByProductCategoryAndProductState(
-                category, ProductState.ACTIVE, pageable);
-
+//        Page<ProductEntity> productPage = productRepository.findByProductCategoryAndProductState(
+//                category, ProductState.ACTIVE, pageable);
+        Page<ProductEntity> productPage = productRepository.findByProductCategory(category, pageable);
+        log.debug("Found {} products in category {}", productPage.getTotalElements(), category);
         return productPage.map(ProductMapper::toDto);
     }
 
@@ -107,24 +107,30 @@ public class ShoppingStoreServiceImpl implements ShoppingStoreService {
     }
 
     // Вспомогательные методы
-    private Pageable createPageable(int page, int size, List<String> sort) {
-        if (sort == null || sort.isEmpty()) {
+    private Pageable createPageable(int page, int size, String sort) {
+        if (sort == null || sort.trim().isEmpty()) {
             return PageRequest.of(page, size);
         }
 
-        List<Sort.Order> orders = sort.stream()
-                .map(this::parseSort)
-                .toList();
+        if (sort.contains(",")) {
+            String[] parts = sort.split(",");
+            if (parts.length == 2) {
+                String property = parts[0].trim();
+                String directionStr = parts[1].trim();
 
-        return PageRequest.of(page, size, Sort.by(orders));
-    }
+                Sort.Direction direction;
+                try {
+                    direction = Sort.Direction.fromString(directionStr);
+                } catch (IllegalArgumentException e) {
+                    direction = Sort.Direction.ASC;
+                }
 
-    private Sort.Order parseSort(String sortParam) {
-        String[] parts = sortParam.split(",");
-        if (parts.length == 2) {
-            return new Sort.Order(Sort.Direction.fromString(parts[1]), parts[0]);
+                return PageRequest.of(page, size, Sort.by(direction, property));
+            }
         }
-        return new Sort.Order(Sort.Direction.ASC, parts[0]);
+
+        // Если только поле без направления, используем ASC по умолчанию
+        return PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, sort.trim()));
     }
 
     private ProductEntity ifProductExistedInDb(UUID productId) {

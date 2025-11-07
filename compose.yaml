@@ -60,7 +60,13 @@ services:
       - -c
       - |
         set -e
-        psql postgresql://db:db@analyzer-db:5432 -v ON_ERROR_STOP=1 <<-EOSQL
+        echo "Waiting for PostgreSQL to be ready..."
+        # Подключаемся к стандартной БД postgres
+        until psql postgresql://db:db@analyzer-db:5432/postgres -c '\q'; do
+          sleep 1
+        done
+        echo "Creating databases..."
+        psql postgresql://db:db@analyzer-db:5432/postgres -v ON_ERROR_STOP=1 <<-EOSQL
         create database commerce_shopping_cart;
         create database commerce_shopping_store;
         create database commerce_warehouse;
@@ -68,3 +74,4 @@ services:
         create database commerce_delivery;
         create database commerce_payment;
         EOSQL
+        echo "All databases created successfully!"
