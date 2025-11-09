@@ -62,7 +62,6 @@ public class ShoppingCartServiceImpl implements ShoppingCartService {
             throw new RuntimeException("Product availability check failed: " + e.getMessage(), e);
         }
 
-
         for (Map.Entry<UUID, Integer> entry : products.entrySet()) {
             UUID productId = entry.getKey();
             Integer quantity = entry.getValue();
