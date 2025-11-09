@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.yandex.practicum.commerce.contract.warehouse.WarehouseClient;
 import ru.yandex.practicum.commerce.dto.shopping.cart.ChangeProductQuantityRequest;
 import ru.yandex.practicum.commerce.dto.shopping.cart.ShoppingCartDto;
 import ru.yandex.practicum.commerce.shopping.cart.dal.ShoppingCartItemRepository;
@@ -15,10 +16,7 @@ import ru.yandex.practicum.commerce.shopping.cart.model.ShoppingCartEntity;
 import ru.yandex.practicum.commerce.shopping.cart.model.ShoppingCartItemEntity;
 import ru.yandex.practicum.commerce.shopping.cart.model.ShoppingCartState;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -29,6 +27,7 @@ public class ShoppingCartServiceImpl implements ShoppingCartService {
 
     private final ShoppingCartRepository shoppingCartRepository;
     private final ShoppingCartItemRepository shoppingCartItemRepository;
+    private final WarehouseClient warehouseClient;
 
     @Override
     public ShoppingCartDto getShoppingCart(String username) {
@@ -47,11 +46,26 @@ public class ShoppingCartServiceImpl implements ShoppingCartService {
         validateUsername(username);
         log.debug("Adding products to cart for user: {}, products: {}", username, products);
         ShoppingCartEntity shoppingCart = getOrCreateActiveCart(username);
+
+        // Создаем временную корзину для проверки на складе
+        ShoppingCartDto tempCart = ShoppingCartDto.builder()
+                .shoppingCartId(shoppingCart.getShoppingCartId())
+                .products(new HashMap<>(products))
+                .build();
+
+        // Проверяем доступность товаров на складе через Feign клиент
+        try {
+            warehouseClient.checkProductQuantityEnoughForShoppingCart(tempCart);
+            log.debug("Products availability confirmed by warehouse");
+        } catch (Exception e) {
+            log.error("Failed to check product availability in warehouse: {}", e.getMessage());
+            throw new RuntimeException("Product availability check failed: " + e.getMessage(), e);
+        }
+
+
         for (Map.Entry<UUID, Integer> entry : products.entrySet()) {
             UUID productId = entry.getKey();
             Integer quantity = entry.getValue();
-
-            // TODO: Добавить проверку доступности товара на складе через Feign клиент
 
             Optional<ShoppingCartItemEntity> existingItem = shoppingCartItemRepository
                     .findByShoppingCart_ShoppingCartIdAndProductId(shoppingCart.getShoppingCartId(), productId);

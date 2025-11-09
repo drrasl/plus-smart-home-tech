@@ -1,6 +1,5 @@
 package ru.yandex.practicum.commerce.shopping.cart.controller;
 
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.annotation.Validated;
@@ -63,7 +62,7 @@ public class ShoppingCartController implements ShoppingCartOperations {
     @Override
     @PostMapping("/change-quantity")
     public ShoppingCartDto changeProductQuantity(@RequestParam String username,
-            @Valid @RequestBody ChangeProductQuantityRequest request) {
+            @RequestBody ChangeProductQuantityRequest request) {
         log.debug("Changing product quantity for user: {}, request: {}", username, request);
         ShoppingCartDto shoppingCart = shoppingCartService.changeProductQuantity(username, request);
         log.debug("Return updated shopping cart: {}", shoppingCart);
