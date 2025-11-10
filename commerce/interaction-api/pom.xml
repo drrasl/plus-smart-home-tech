@@ -51,6 +51,7 @@
                     <layers>
                         <enabled>true</enabled>
                     </layers>
+                    <skip>true</skip>  <!-- Не приложение, а библиотека, но мне нужен ломбок -->
                     <excludes>
                         <exclude>
                             <groupId>org.projectlombok</groupId>
