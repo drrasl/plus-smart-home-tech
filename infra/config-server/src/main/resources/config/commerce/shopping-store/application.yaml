@@ -35,7 +35,7 @@ logging:
   level:
     ru:
       yandex:
-        practicum: TRACE
+        practicum: DEBUG
     org:
       springframework:
         orm:
