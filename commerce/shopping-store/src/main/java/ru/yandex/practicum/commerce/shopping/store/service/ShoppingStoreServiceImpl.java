@@ -15,7 +15,7 @@ import ru.yandex.practicum.commerce.shopping.store.dal.ProductRepository;
 import ru.yandex.practicum.commerce.shopping.store.exception.ProductNotFoundBusinessException;
 import ru.yandex.practicum.commerce.shopping.store.mapper.ProductMapper;
 import ru.yandex.practicum.commerce.shopping.store.model.ProductEntity;
-import ru.yandex.practicum.commerce.shopping.store.model.SetProductQuantityStateRequest;
+import ru.yandex.practicum.commerce.dto.shopping.store.SetProductQuantityStateRequest;
 
 import java.util.*;
 
@@ -33,8 +33,6 @@ public class ShoppingStoreServiceImpl implements ShoppingStoreService {
                 category, page, size, sort);
 
         Pageable pageable = createPageable(page, size, sort);
-//        Page<ProductEntity> productPage = productRepository.findByProductCategoryAndProductState(
-//                category, ProductState.ACTIVE, pageable);
         Page<ProductEntity> productPage = productRepository.findByProductCategory(category, pageable);
         log.debug("Found {} products in category {}", productPage.getTotalElements(), category);
         return productPage.map(ProductMapper::toDto);

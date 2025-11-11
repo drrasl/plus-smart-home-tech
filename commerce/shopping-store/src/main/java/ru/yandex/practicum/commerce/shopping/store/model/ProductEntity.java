@@ -1,10 +1,7 @@
 package ru.yandex.practicum.commerce.shopping.store.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import ru.yandex.practicum.commerce.dto.shopping.store.ProductCategory;
 import ru.yandex.practicum.commerce.dto.shopping.store.ProductState;
 import ru.yandex.practicum.commerce.dto.shopping.store.QuantityState;
@@ -15,7 +12,9 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "products")
-@Data
+@Setter
+@Getter
+@EqualsAndHashCode(of = {"productId"})
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor

@@ -10,7 +10,7 @@ import ru.yandex.practicum.commerce.contract.shopping.store.ShoppingStoreOperati
 import ru.yandex.practicum.commerce.dto.shopping.store.ProductCategory;
 import ru.yandex.practicum.commerce.dto.shopping.store.ProductDto;
 import ru.yandex.practicum.commerce.dto.shopping.store.QuantityState;
-import ru.yandex.practicum.commerce.shopping.store.model.SetProductQuantityStateRequest;
+import ru.yandex.practicum.commerce.dto.shopping.store.SetProductQuantityStateRequest;
 import ru.yandex.practicum.commerce.shopping.store.service.ShoppingStoreService;
 
 import java.util.UUID;

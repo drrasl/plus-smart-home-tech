@@ -1,16 +1,15 @@
 package ru.yandex.practicum.commerce.shopping.cart.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.util.UUID;
 
 @Entity
 @Table(name = "shopping_cart_items")
-@Data
+@Setter
+@Getter
+@EqualsAndHashCode(of = {"cartItemId"})
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
