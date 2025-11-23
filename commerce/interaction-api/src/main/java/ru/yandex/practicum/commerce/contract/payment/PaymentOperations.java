@@ -22,11 +22,4 @@ public interface PaymentOperations {
 
     // Метод для эмуляции отказа в оплате платежного шлюза
     void paymentFailed(UUID paymentId);
-
-
-
-
-
-
-
 }

@@ -16,6 +16,6 @@ public class DeliveryDto {
     private UUID deliveryId;
     private AddressDto fromAddress;
     private AddressDto toAddress;
-    private String orderId;
+    private UUID orderId;
     private DeliveryState deliveryState;
 }

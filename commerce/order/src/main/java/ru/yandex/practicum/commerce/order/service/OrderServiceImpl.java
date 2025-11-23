@@ -6,6 +6,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.yandex.practicum.commerce.contract.payment.PaymentClient;
 import ru.yandex.practicum.commerce.contract.warehouse.WarehouseClient;
+import ru.yandex.practicum.commerce.dto.delivery.DeliveryDto;
+import ru.yandex.practicum.commerce.dto.delivery.DeliveryState;
 import ru.yandex.practicum.commerce.dto.order.CreateNewOrderRequest;
 import ru.yandex.practicum.commerce.dto.order.OrderDto;
 import ru.yandex.practicum.commerce.dto.order.OrderState;
@@ -13,6 +15,8 @@ import ru.yandex.practicum.commerce.dto.order.ProductReturnRequest;
 import ru.yandex.practicum.commerce.dto.payment.PaymentDto;
 import ru.yandex.practicum.commerce.dto.shopping.cart.ShoppingCartDto;
 import ru.yandex.practicum.commerce.dto.warehouse.AddProductToWarehouseRequest;
+import ru.yandex.practicum.commerce.dto.warehouse.AddressDto;
+import ru.yandex.practicum.commerce.dto.warehouse.BookedProductsDto;
 import ru.yandex.practicum.commerce.order.dal.OrderItemRepository;
 import ru.yandex.practicum.commerce.order.dal.OrderRepository;
 import ru.yandex.practicum.commerce.order.exception.NoOrderFoundBusinessException;
@@ -20,6 +24,7 @@ import ru.yandex.practicum.commerce.order.exception.NotAuthorizedBusinessExcepti
 import ru.yandex.practicum.commerce.order.mapper.OrderMapper;
 import ru.yandex.practicum.commerce.order.model.OrderEntity;
 import ru.yandex.practicum.commerce.order.model.OrderItemEntity;
+import ru.yandex.practicum.commerce.contract.delivery.DeliveryClient;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
@@ -36,6 +41,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderItemRepository orderItemRepository;
     private final WarehouseClient warehouseClient;
     private final PaymentClient paymentClient;
+    private final DeliveryClient deliveryClient;
 
     @Override
     @Transactional(readOnly = true)
@@ -63,10 +69,10 @@ public class OrderServiceImpl implements OrderService {
                 .shoppingCartId(request.getShoppingCart().getShoppingCartId())
                 .products(new HashMap<>(request.getShoppingCart().getProducts()))
                 .build();
-
-        // Проверяем доступность товаров на складе через Feign клиент
+        BookedProductsDto bookedProductsDto;
+        // Проверяем доступность товаров на складе через Feign клиент и получаем габариты
         try {
-            warehouseClient.checkProductQuantityEnoughForShoppingCart(tempCart);
+            bookedProductsDto =  warehouseClient.checkProductQuantityEnoughForShoppingCart(tempCart);
             log.debug("Products availability confirmed by warehouse");
         } catch (Exception e) {
             log.error("Failed to check product availability in warehouse: {}", e.getMessage());
@@ -77,15 +83,16 @@ public class OrderServiceImpl implements OrderService {
                 .username(username)
                 .shoppingCartId(request.getShoppingCart().getShoppingCartId())
                 .orderState(OrderState.NEW)
-                //paymentId, deliveryId еще не создавались -> дозаполним позже
-                //deliveryWeight, deliveryVolume, fragile еще не создавались -> дозаполним позже
-                //totalPrice, deliveryPrice, product price еще не создавались -> дозаполним позже
+                .deliveryWeight(bookedProductsDto.getDeliveryWeight())
+                .deliveryVolume(bookedProductsDto.getDeliveryVolume())
+                .fragile(bookedProductsDto.getFragile())
+                //paymentId, deliveryId еще не создавались
+                //totalPrice, deliveryPrice, product price еще не создавались
                 .country(request.getDeliveryAddress().getCountry())
                 .city(request.getDeliveryAddress().getCity())
                 .street(request.getDeliveryAddress().getStreet())
                 .house(request.getDeliveryAddress().getHouse())
                 .flat(request.getDeliveryAddress().getFlat())
-                .fragile(false) // По дефолту делаем FALSE
                 .build();
 
         OrderEntity savedOrder = orderRepository.save(order);
@@ -97,23 +104,45 @@ public class OrderServiceImpl implements OrderService {
         );
         orderItemRepository.saveAll(orderItems);
 
-        // 1. Рассчитываем стоимость доставки
+        // 1. Создаем доставку для заказа
+        DeliveryDto createdDelivery;
+        try {
+            // Получаем адрес склада
+            AddressDto warehouseAddress = warehouseClient.getWarehouseAddress();
+            log.debug("Warehouse address received: {}", warehouseAddress);
+
+            // Создаем DTO для доставки
+            DeliveryDto deliveryRequest = DeliveryDto.builder()
+                    .orderId(savedOrder.getOrderId())
+                    .fromAddress(warehouseAddress) // адрес склада
+                    .toAddress(request.getDeliveryAddress()) // адрес клиента из запроса
+                    .deliveryState(DeliveryState.CREATED)
+                    .build();
+
+            createdDelivery = deliveryClient.delivery(deliveryRequest);
+            savedOrder.setDeliveryId(createdDelivery.getDeliveryId());
+            log.debug("Delivery created with ID: {}", createdDelivery.getDeliveryId());
+        } catch (Exception e) {
+            log.error("Failed to create delivery: {}", e.getMessage());
+            throw new RuntimeException("Delivery creation failed: " + e.getMessage(), e);
+        }
+
+        // 2. Рассчитываем стоимость доставки
         OrderDto orderDtoForDelivery = OrderMapper.toDto(savedOrder, orderItems);
         BigDecimal deliveryCost;
         try {
-//            deliveryCost = deliveryClient.calculateDeliveryCost(orderDtoForDelivery);
-            deliveryCost = BigDecimal.ZERO; // Заглушка TODO убрать после доставки
-            //Нужно получить deliveryId, volume, weight
+            deliveryCost = deliveryClient.deliveryCost(orderDtoForDelivery);
             savedOrder.setDeliveryPrice(deliveryCost);
             log.debug("Delivery cost calculated: {}", deliveryCost);
         } catch (Exception e) {
             log.error("Failed to calculate delivery cost: {}", e.getMessage());
             throw new RuntimeException("Delivery cost calculation failed: " + e.getMessage(), e);
         }
-        // Обновляем заказ с ценой доставки - сохранили стоимость доставки в БД
+
+        // Обновляем заказ с deliveryId и ценой доставки
         OrderEntity updatedOrder = orderRepository.save(savedOrder);
 
-        // 2. Запускаем процесс оплаты
+        // 3. Запускаем процесс оплаты
         OrderDto orderDtoForPayment = OrderMapper.toDto(updatedOrder, orderItems);
         PaymentDto paymentDto;
         try {
@@ -152,7 +181,7 @@ public class OrderServiceImpl implements OrderService {
 
         // Возвращаем товары обратно на склад.
         // Используем существующий метод addProductToWarehouse для каждого товара через Feign клиент
-        // TODO: Проверь, возможно будет новый метод на складе - возврат товара!
+        // TODO: Проверь, возможно будет новый метод на складе - возврат товара! ДА ОН ЕСТЬ (((((
         try {
             for (Map.Entry<UUID, Integer> productEntry : request.getProducts().entrySet()) {
                 UUID productId = productEntry.getKey();
@@ -215,8 +244,6 @@ public class OrderServiceImpl implements OrderService {
         OrderEntity order = getOrderEntity(orderId);
         order.setOrderState(OrderState.DELIVERED);
 
-        // TODO: Integrate with delivery service ????
-
         OrderEntity updatedOrder = orderRepository.save(order);
         List<OrderItemEntity> items = orderItemRepository.findByOrderOrderId(updatedOrder.getOrderId());
 
@@ -230,8 +257,6 @@ public class OrderServiceImpl implements OrderService {
 
         OrderEntity order = getOrderEntity(orderId);
         order.setOrderState(OrderState.DELIVERY_FAILED);
-
-        // TODO: Integrate with delivery service ????
 
         OrderEntity updatedOrder = orderRepository.save(order);
         List<OrderItemEntity> items = orderItemRepository.findByOrderOrderId(updatedOrder.getOrderId());
@@ -318,8 +343,7 @@ public class OrderServiceImpl implements OrderService {
         // Интегрируемся с delivery service для расчета стоимости доставки
         BigDecimal deliveryCost;
         try {
-//          deliveryCost = deliveryClient.getDeliveryCost(orderDto);
-            deliveryCost = BigDecimal.valueOf(0); // TODO: Placeholder
+            deliveryCost = deliveryClient.deliveryCost(orderDto);
             log.debug("Successfully calculated delivery cost from delivery service: {}", deliveryCost);
         } catch (Exception e) {
             log.error("Failed to calculate delivery cost from delivery service for order: {}. Error: {}",
@@ -341,8 +365,7 @@ public class OrderServiceImpl implements OrderService {
         OrderEntity order = getOrderEntity(orderId);
         order.setOrderState(OrderState.ASSEMBLED);
 
-        // TODO: Integrate with warehouse service for assembly
-        // TODO: Здесь мы добавим метод сборки на складе скорее всего потом
+        //Склад уведомляем из доставки - здесь только меняем статус
 
         OrderEntity updatedOrder = orderRepository.save(order);
         List<OrderItemEntity> items = orderItemRepository.findByOrderOrderId(updatedOrder.getOrderId());
