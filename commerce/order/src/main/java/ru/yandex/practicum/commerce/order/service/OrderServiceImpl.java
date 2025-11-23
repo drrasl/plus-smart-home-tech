@@ -4,11 +4,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.yandex.practicum.commerce.contract.payment.PaymentClient;
 import ru.yandex.practicum.commerce.contract.warehouse.WarehouseClient;
 import ru.yandex.practicum.commerce.dto.order.CreateNewOrderRequest;
 import ru.yandex.practicum.commerce.dto.order.OrderDto;
 import ru.yandex.practicum.commerce.dto.order.OrderState;
 import ru.yandex.practicum.commerce.dto.order.ProductReturnRequest;
+import ru.yandex.practicum.commerce.dto.payment.PaymentDto;
 import ru.yandex.practicum.commerce.dto.shopping.cart.ShoppingCartDto;
 import ru.yandex.practicum.commerce.dto.warehouse.AddProductToWarehouseRequest;
 import ru.yandex.practicum.commerce.order.dal.OrderItemRepository;
@@ -33,6 +35,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final WarehouseClient warehouseClient;
+    private final PaymentClient paymentClient;
 
     @Override
     @Transactional(readOnly = true)
@@ -71,11 +74,12 @@ public class OrderServiceImpl implements OrderService {
         }
 
         OrderEntity order = OrderEntity.builder()
-                .shoppingCartId(request.getShoppingCart().getShoppingCartId())
-                //paymentId, deliveryId еще не создавались -> дозаполним после нужных эндпоинтов
                 .username(username)
+                .shoppingCartId(request.getShoppingCart().getShoppingCartId())
                 .orderState(OrderState.NEW)
-                //deliveryWeight, deliveryVolume, fragile еще не создавались -> дозаполним после нужных эндпоинтов
+                //paymentId, deliveryId еще не создавались -> дозаполним позже
+                //deliveryWeight, deliveryVolume, fragile еще не создавались -> дозаполним позже
+                //totalPrice, deliveryPrice, product price еще не создавались -> дозаполним позже
                 .country(request.getDeliveryAddress().getCountry())
                 .city(request.getDeliveryAddress().getCity())
                 .street(request.getDeliveryAddress().getStreet())
@@ -93,8 +97,44 @@ public class OrderServiceImpl implements OrderService {
         );
         orderItemRepository.saveAll(orderItems);
 
-        OrderDto result = OrderMapper.toDto(savedOrder, orderItems);
-        log.info("Created new order with id: {}", result.getOrderId());
+        // 1. Рассчитываем стоимость доставки
+        OrderDto orderDtoForDelivery = OrderMapper.toDto(savedOrder, orderItems);
+        BigDecimal deliveryCost;
+        try {
+//            deliveryCost = deliveryClient.calculateDeliveryCost(orderDtoForDelivery);
+            deliveryCost = BigDecimal.ZERO; // Заглушка TODO убрать после доставки
+            //Нужно получить deliveryId, volume, weight
+            savedOrder.setDeliveryPrice(deliveryCost);
+            log.debug("Delivery cost calculated: {}", deliveryCost);
+        } catch (Exception e) {
+            log.error("Failed to calculate delivery cost: {}", e.getMessage());
+            throw new RuntimeException("Delivery cost calculation failed: " + e.getMessage(), e);
+        }
+        // Обновляем заказ с ценой доставки - сохранили стоимость доставки в БД
+        OrderEntity updatedOrder = orderRepository.save(savedOrder);
+
+        // 2. Запускаем процесс оплаты
+        OrderDto orderDtoForPayment = OrderMapper.toDto(updatedOrder, orderItems);
+        PaymentDto paymentDto;
+        try {
+            paymentDto = paymentClient.payment(orderDtoForPayment);
+            updatedOrder.setPaymentId(paymentDto.getPaymentId());
+            updatedOrder.setOrderState(OrderState.ON_PAYMENT); // Меняем статус на "ожидает оплаты"
+            updatedOrder.setTotalPrice(paymentDto.getTotalPayment());
+            updatedOrder.setProductPrice(paymentDto.getTotalPayment().subtract(paymentDto.getDeliveryTotal())
+                    .subtract(paymentDto.getFeeTotal()));
+            log.debug("Payment process started with payment ID: {}", paymentDto.getPaymentId());
+        } catch (Exception e) {
+            log.error("Failed to create payment: {}", e.getMessage());
+            throw new RuntimeException("Payment creation failed: " + e.getMessage(), e);
+        }
+
+        // Сохраняем заказ с paymentId и новым статусом
+        OrderEntity finalOrder = orderRepository.save(updatedOrder);
+
+        OrderDto result = OrderMapper.toDto(finalOrder, orderItems);
+        log.info("Created new order with id: {} and payment id: {}",
+                result.getOrderId(), result.getPaymentId());
 
         return result;
     }
@@ -137,18 +177,19 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public OrderDto payment(UUID orderId) {
-        log.info("Processing payment for order: {}", orderId);
+        log.info("Processing payment success for order: {}", orderId);
 
         OrderEntity order = getOrderEntity(orderId);
+        // Проверяем, что заказ в правильном статусе для оплаты
+        if (order.getOrderState() != OrderState.ON_PAYMENT) {
+            log.warn("Order {} is in state {}, but expected ON_PAYMENT",
+                    orderId, order.getOrderState());
+        }
         order.setOrderState(OrderState.PAID);
-
-        // TODO: Integrate with payment service
-        // UUID paymentId = paymentService.processPayment(orderId);
-        // order.setPaymentId(paymentId);
 
         OrderEntity updatedOrder = orderRepository.save(order);
         List<OrderItemEntity> items = orderItemRepository.findByOrderOrderId(updatedOrder.getOrderId());
-
+        log.info("Order {} successfully paid", orderId);
         return OrderMapper.toDto(updatedOrder, items);
     }
 
@@ -160,11 +201,9 @@ public class OrderServiceImpl implements OrderService {
         OrderEntity order = getOrderEntity(orderId);
         order.setOrderState(OrderState.PAYMENT_FAILED);
 
-        // TODO: Integrate with payment service ????
-
         OrderEntity updatedOrder = orderRepository.save(order);
         List<OrderItemEntity> items = orderItemRepository.findByOrderOrderId(updatedOrder.getOrderId());
-
+        log.info("Order {} payment failed", orderId);
         return OrderMapper.toDto(updatedOrder, items);
     }
 
@@ -214,6 +253,10 @@ public class OrderServiceImpl implements OrderService {
         return OrderMapper.toDto(updatedOrder, items);
     }
 
+    //Непонятна целесообразность данного метода. В формировании заказа я пользуюсь методом createPayment сервиса оплаты,
+    //который в свою очередь сразу рассчитывает все. Возможно данный метод требуется, чтобы рассчитать полную стоимость
+    //без инициализации процесса оплаты. Мы же в свою очередь полагаем, что в методе createPayment активируется
+    //внешний платежный сервис
     @Override
     @Transactional
     public OrderDto calculateTotalCost(UUID orderId) {
@@ -222,17 +265,37 @@ public class OrderServiceImpl implements OrderService {
         OrderEntity order = getOrderEntity(orderId);
         List<OrderItemEntity> items = orderItemRepository.findByOrderOrderId(orderId);
 
-        // TODO: Integrate with payment service for total cost calculation
-        // BigDecimal totalCost = paymentService.calculateTotalCost(orderId);
+        // Создаем OrderDto для передачи в payment service
+        OrderDto orderDto = OrderMapper.toDto(order, items);
 
-        BigDecimal totalCost = BigDecimal.valueOf(0); // TODO: Placeholder
+        // Если стоимость доставки еще не рассчитана, рассчитываем её
+        if (order.getDeliveryPrice() == null) {
+            BigDecimal deliveryCost = calculateDeliveryCost(orderId).getDeliveryPrice();
+            order.setDeliveryPrice(deliveryCost);
+            orderDto.setDeliveryPrice(deliveryCost);
+            log.debug("Delivery cost calculated during total cost calculation: {}", deliveryCost);
+        }
 
+        // Интегрируемся с payment service для расчета общей стоимости
+        BigDecimal totalCost;
+        try {
+            totalCost = paymentClient.getTotalCost(orderDto);
+            log.debug("Successfully calculated total cost from payment service: {}", totalCost);
+        } catch (Exception e) {
+            log.error("Failed to calculate total cost from payment service for order: {}. Error: {}",
+                    orderId, e.getMessage());
+            throw new RuntimeException("Failed to calculate total cost: " + e.getMessage(), e);
+        }
+
+        // Сохраняем рассчитанную стоимость в заказ
         order.setTotalPrice(totalCost);
         OrderEntity updatedOrder = orderRepository.save(order);
 
+        log.info("Total cost calculated and saved for order {}: {}", orderId, totalCost);
         return OrderMapper.toDto(updatedOrder, items);
     }
 
+    //То же самое, что и с методом выше
     @Override
     @Transactional
     public OrderDto calculateDeliveryCost(UUID orderId) {
@@ -241,10 +304,28 @@ public class OrderServiceImpl implements OrderService {
         OrderEntity order = getOrderEntity(orderId);
         List<OrderItemEntity> items = orderItemRepository.findByOrderOrderId(orderId);
 
-        // TODO: Integrate with delivery service for cost calculation
-        // BigDecimal deliveryCost = deliveryService.calculateDeliveryCost(orderId);
+        // Создаем OrderDto для передачи в payment service
+        OrderDto orderDto = OrderMapper.toDto(order, items);
 
-        BigDecimal deliveryCost = BigDecimal.valueOf(0); // TODO: Placeholder
+        // Если стоимость оплаты еще не рассчитана, рассчитываем её
+        if (order.getTotalPrice() == null) {
+            BigDecimal totalCost = calculateTotalCost(orderId).getTotalPrice();
+            order.setTotalPrice(totalCost);
+            orderDto.setTotalPrice(totalCost);
+            log.debug("Total cost calculated during delivery cost calculation: {}", totalCost);
+        }
+
+        // Интегрируемся с delivery service для расчета стоимости доставки
+        BigDecimal deliveryCost;
+        try {
+//          deliveryCost = deliveryClient.getDeliveryCost(orderDto);
+            deliveryCost = BigDecimal.valueOf(0); // TODO: Placeholder
+            log.debug("Successfully calculated delivery cost from delivery service: {}", deliveryCost);
+        } catch (Exception e) {
+            log.error("Failed to calculate delivery cost from delivery service for order: {}. Error: {}",
+                    orderId, e.getMessage());
+            throw new RuntimeException("Failed to calculate delivery cost: " + e.getMessage(), e);
+        }
 
         order.setDeliveryPrice(deliveryCost);
         OrderEntity updatedOrder = orderRepository.save(order);
