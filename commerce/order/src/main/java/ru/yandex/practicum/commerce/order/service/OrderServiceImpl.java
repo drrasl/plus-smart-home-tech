@@ -14,8 +14,8 @@ import ru.yandex.practicum.commerce.dto.order.OrderState;
 import ru.yandex.practicum.commerce.dto.order.ProductReturnRequest;
 import ru.yandex.practicum.commerce.dto.payment.PaymentDto;
 import ru.yandex.practicum.commerce.dto.shopping.cart.ShoppingCartDto;
-import ru.yandex.practicum.commerce.dto.warehouse.AddProductToWarehouseRequest;
 import ru.yandex.practicum.commerce.dto.warehouse.AddressDto;
+import ru.yandex.practicum.commerce.dto.warehouse.AssemblyProductsForOrderRequest;
 import ru.yandex.practicum.commerce.dto.warehouse.BookedProductsDto;
 import ru.yandex.practicum.commerce.order.dal.OrderItemRepository;
 import ru.yandex.practicum.commerce.order.dal.OrderRepository;
@@ -104,6 +104,32 @@ public class OrderServiceImpl implements OrderService {
         );
         orderItemRepository.saveAll(orderItems);
 
+        // 0. СБОРКА ТОВАРОВ НА СКЛАДЕ
+            AssemblyProductsForOrderRequest assemblyRequest = AssemblyProductsForOrderRequest.builder()
+                    .orderId(savedOrder.getOrderId())
+                    .products(request.getShoppingCart().getProducts())
+                    .build();
+        try {
+            BookedProductsDto assemblyResult = warehouseClient.assemblyProductsForOrder(assemblyRequest);
+            log.debug("Products assembled for order: {}", savedOrder.getOrderId());
+
+            // Меняем статус заказа на собран
+            OrderDto assembled = assembly(savedOrder.getOrderId());
+
+            // Обновляем характеристики доставки на основе реальной сборки
+            savedOrder.setDeliveryWeight(assemblyResult.getDeliveryWeight());
+            savedOrder.setDeliveryVolume(assemblyResult.getDeliveryVolume());
+            savedOrder.setFragile(assemblyResult.getFragile());
+
+        } catch (Exception e) {
+            log.error("Failed to assemble products for order {}: {}", savedOrder.getOrderId(), e.getMessage());
+
+            // Меняем статус заказа на ошибку сборки
+            OrderDto assembled = assemblyFailed(savedOrder.getOrderId());
+
+            throw new RuntimeException("Product assembly failed: " + e.getMessage(), e);
+        }
+
         // 1. Создаем доставку для заказа
         DeliveryDto createdDelivery;
         try {
@@ -180,22 +206,12 @@ public class OrderServiceImpl implements OrderService {
         List<OrderItemEntity> items = orderItemRepository.findByOrderOrderId(updatedOrder.getOrderId());
 
         // Возвращаем товары обратно на склад.
-        // Используем существующий метод addProductToWarehouse для каждого товара через Feign клиент
-        // TODO: Проверь, возможно будет новый метод на складе - возврат товара! ДА ОН ЕСТЬ (((((
         try {
-            for (Map.Entry<UUID, Integer> productEntry : request.getProducts().entrySet()) {
-                UUID productId = productEntry.getKey();
-                Integer quantity = productEntry.getValue();
+            // Создаем Map для возвращаемых товаров
+            Map<UUID, Integer> returnedProducts = new HashMap<>(request.getProducts());
 
-                AddProductToWarehouseRequest addRequest = AddProductToWarehouseRequest.builder()
-                        .productId(productId)
-                        .quantity(quantity.longValue())
-                        .build();
-
-                warehouseClient.addProductToWarehouse(addRequest);
-                log.debug("Product {} returned to warehouse with quantity: {}", productId, quantity);
-            }
-            log.debug("All products successfully returned to warehouse");
+            warehouseClient.acceptReturn(returnedProducts);
+            log.debug("All products successfully returned to warehouse: {}", returnedProducts);
         } catch (Exception e) {
             log.error("Failed to return products to warehouse: {}", e.getMessage());
             throw new RuntimeException("Product return to warehouse failed: " + e.getMessage(), e);
@@ -219,6 +235,18 @@ public class OrderServiceImpl implements OrderService {
         OrderEntity updatedOrder = orderRepository.save(order);
         List<OrderItemEntity> items = orderItemRepository.findByOrderOrderId(updatedOrder.getOrderId());
         log.info("Order {} successfully paid", orderId);
+        //После успешной оплаты заказа - вызываем доставку
+        try {
+            deliveryClient.deliveryPicked(orderId);
+            log.debug("Delivery notified about delivery shipment for order: {}", orderId);
+
+        } catch (Exception e) {
+            log.error("Failed to process delivery picked for order in payment service: {}. Error: {}",
+                    orderId, e.getMessage());
+
+            throw new RuntimeException("Failed to process delivery picked from payment service: " + e.getMessage(), e);
+        }
+        log.info("Delivery {} successfully requested", orderId);
         return OrderMapper.toDto(updatedOrder, items);
     }
 
@@ -365,8 +393,6 @@ public class OrderServiceImpl implements OrderService {
         OrderEntity order = getOrderEntity(orderId);
         order.setOrderState(OrderState.ASSEMBLED);
 
-        //Склад уведомляем из доставки - здесь только меняем статус
-
         OrderEntity updatedOrder = orderRepository.save(order);
         List<OrderItemEntity> items = orderItemRepository.findByOrderOrderId(updatedOrder.getOrderId());
 
@@ -380,8 +406,6 @@ public class OrderServiceImpl implements OrderService {
 
         OrderEntity order = getOrderEntity(orderId);
         order.setOrderState(OrderState.ASSEMBLY_FAILED);
-
-        // TODO: Integrate with warehouse service for assembly ?????
 
         OrderEntity updatedOrder = orderRepository.save(order);
         List<OrderItemEntity> items = orderItemRepository.findByOrderOrderId(updatedOrder.getOrderId());

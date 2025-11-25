@@ -38,6 +38,27 @@ spring:
           filters:
             - PrefixPath=/api/v1
             - CircuitBreaker=warehouseCircuit
+        - id: payment_service_route
+          uri: lb://payment
+          predicates:
+            - Path=/payment/**
+          filters:
+            - PrefixPath=/api/v1
+            - CircuitBreaker=paymentCircuit
+        - id: delivery_service_route
+          uri: lb://delivery
+          predicates:
+            - Path=/delivery/**
+          filters:
+            - PrefixPath=/api/v1
+            - CircuitBreaker=deliveryCircuit
+        - id: order_service_route
+          uri: lb://order
+          predicates:
+            - Path=/order/**
+          filters:
+            - PrefixPath=/api/v1
+            - CircuitBreaker=orderCircuit
 
 
 resilience4j.circuitbreaker:
@@ -67,3 +88,25 @@ resilience4j.circuitbreaker:
       slidingWindowType: COUNT_BASED
       minimumNumberOfCalls: 5
       automaticTransitionFromOpenToHalfOpenEnabled: true
+    paymentCircuit:
+      slidingWindowSize: 10
+      waitDurationInOpenState: 10000 # 10 секунд в миллисекундах
+      permittedNumberOfCallsInHalfOpenState: 3
+      slidingWindowType: COUNT_BASED
+      minimumNumberOfCalls: 5
+      automaticTransitionFromOpenToHalfOpenEnabled: true
+    deliveryCircuit:
+      slidingWindowSize: 10
+      waitDurationInOpenState: 10000 # 10 секунд в миллисекундах
+      permittedNumberOfCallsInHalfOpenState: 3
+      slidingWindowType: COUNT_BASED
+      minimumNumberOfCalls: 5
+      automaticTransitionFromOpenToHalfOpenEnabled: true
+    orderCircuit:
+      slidingWindowSize: 10
+      waitDurationInOpenState: 10000 # 10 секунд в миллисекундах
+      permittedNumberOfCallsInHalfOpenState: 3
+      slidingWindowType: COUNT_BASED
+      minimumNumberOfCalls: 5
+      automaticTransitionFromOpenToHalfOpenEnabled: true
+    # Написано так, чтобы можно было настроить каждый по отдельности, подразумевается, что у каждого будут разные настройки

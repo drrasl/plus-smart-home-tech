@@ -15,6 +15,7 @@ import ru.yandex.practicum.commerce.dto.delivery.DeliveryDto;
 import ru.yandex.practicum.commerce.dto.delivery.DeliveryState;
 import ru.yandex.practicum.commerce.dto.order.OrderDto;
 import ru.yandex.practicum.commerce.dto.warehouse.AddressDto;
+import ru.yandex.practicum.commerce.dto.warehouse.ShippedToDeliveryRequest;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -97,30 +98,29 @@ public class DeliveryServiceImpl implements DeliveryService {
         log.info("Processing delivery picked for order: {}", orderId);
 
         DeliveryEntity delivery = getDeliveryByOrderIdEntity(orderId);
-        delivery.setDeliveryState(DeliveryState.IN_PROGRESS);
 
         DeliveryEntity updatedDelivery = deliveryRepository.save(delivery);
 
+        // Уведомляем склад о передаче в доставку
+        ShippedToDeliveryRequest shippedRequest = ShippedToDeliveryRequest.builder()
+                .orderId(orderId)
+                .deliveryId(delivery.getDeliveryId())
+                .build();
         try {
-            // Уведомляем сервис заказов о начале сборки
-            OrderDto updatedOrder = orderClient.assembly(orderId);
-            if (updatedOrder != null) {
-                log.debug("Successfully updated order status for order: {}", orderId);
-            } else {
-                log.error("Failed to update order status - returned null for order: {}", orderId);
-                throw new RuntimeException("Order service returned null response for order: " + orderId);
-            }
+            warehouseClient.shippedToDelivery(shippedRequest);
+            delivery.setDeliveryState(DeliveryState.IN_PROGRESS);
+            log.debug("Warehouse notified about delivery shipment for order: {}", orderId);
 
-            // Уведомляем склад о передаче в доставку
-            // warehouseClient.shippedToDelivery(delivery.getDeliveryId()); // TODO: реализовать когда будет метод
         } catch (Exception e) {
-            log.error("Failed to update order status in order service for order: {}. Error: {}",
+            log.error("Failed to process delivery picked for order: {}. Error: {}",
                     orderId, e.getMessage());
-            throw new RuntimeException("Failed to update order status: " + e.getMessage(), e);
+            delivery.setDeliveryState(DeliveryState.FAILED);
+            throw new RuntimeException("Failed to process delivery picked: " + e.getMessage(), e);
         }
         log.info("Delivery for order {} marked as IN_PROGRESS", orderId);
     }
 
+    //Метод ниже будут вызываться после удачной доставки
     @Override
     @Transactional
     public void processDeliverySuccess(UUID orderId) {
@@ -147,6 +147,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         log.info("Delivery for order {} marked as DELIVERED", orderId);
     }
 
+    //Метод ниже будут вызываться после неудачной доставки
     @Override
     @Transactional
     public void processDeliveryFailed(UUID orderId) {
