@@ -2,10 +2,10 @@ package ru.yandex.practicum.commerce.contract.warehouse;
 
 import org.springframework.stereotype.Component;
 import ru.yandex.practicum.commerce.dto.shopping.cart.ShoppingCartDto;
-import ru.yandex.practicum.commerce.dto.warehouse.AddProductToWarehouseRequest;
-import ru.yandex.practicum.commerce.dto.warehouse.AddressDto;
-import ru.yandex.practicum.commerce.dto.warehouse.BookedProductsDto;
-import ru.yandex.practicum.commerce.dto.warehouse.NewProductInWarehouseRequest;
+import ru.yandex.practicum.commerce.dto.warehouse.*;
+
+import java.util.Map;
+import java.util.UUID;
 
 @Component
 public class WarehouseClientFallback  implements WarehouseClient {
@@ -26,6 +26,21 @@ public class WarehouseClientFallback  implements WarehouseClient {
 
     @Override
     public AddressDto getWarehouseAddress() {
+        throw new RuntimeException("Warehouse service is unavailable");
+    }
+
+    @Override
+    public BookedProductsDto assemblyProductsForOrder(AssemblyProductsForOrderRequest request) {
+        throw new RuntimeException("Warehouse service is unavailable");
+    }
+
+    @Override
+    public void shippedToDelivery(ShippedToDeliveryRequest request) {
+        throw new RuntimeException("Warehouse service is unavailable");
+    }
+
+    @Override
+    public void acceptReturn(Map<UUID, Integer> returnedProducts) {
         throw new RuntimeException("Warehouse service is unavailable");
     }
 }
