@@ -43,6 +43,10 @@ logging:
         transaction: DEBUG
   root: INFO
 
+feign:
+  circuitbreaker:
+    enabled: true
+
 resilience4j.circuitbreaker:
   configs:
     default:

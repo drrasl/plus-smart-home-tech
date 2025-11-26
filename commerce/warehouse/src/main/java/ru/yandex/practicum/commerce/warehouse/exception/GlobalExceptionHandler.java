@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import ru.yandex.practicum.commerce.dto.warehouse.exception.NoSpecifiedProductInWarehouseException;
 import ru.yandex.practicum.commerce.dto.warehouse.exception.ProductInShoppingCartLowQuantityInWarehouse;
+import ru.yandex.practicum.commerce.dto.warehouse.exception.ProductInShoppingCartNotInWarehouse;
 import ru.yandex.practicum.commerce.dto.warehouse.exception.SpecifiedProductAlreadyInWarehouseException;
 
 import java.util.Arrays;
@@ -71,6 +72,25 @@ public class GlobalExceptionHandler {
                 .stackTrace(convertStackTraceForNoProduct(ex.getStackTrace()))
                 .cause(convertThrowableCauseForNoProduct(ex.getCause()))
                 .suppressed(convertSuppressedForNoProduct(ex.getSuppressed()))
+                .build();
+
+        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(ProductInShoppingCartNotInWarehouseBusinessException.class)
+    public ResponseEntity<ProductInShoppingCartNotInWarehouse> handleProductNotInWarehouse(
+            ProductInShoppingCartNotInWarehouseBusinessException ex, WebRequest request) {
+
+        log.warn("Product not found in warehouse: {}", ex.getProductId());
+
+        ProductInShoppingCartNotInWarehouse errorResponse = ProductInShoppingCartNotInWarehouse.builder()
+                .message(ex.getMessage())
+                .userMessage("Ошибка, товар из корзины отсутствует в БД склада")
+                .httpStatus(HttpStatus.BAD_REQUEST)
+                .localizedMessage(ex.getLocalizedMessage())
+                .stackTrace(convertStackTraceForProductNotInWarehouse(ex.getStackTrace()))
+                .cause(convertThrowableCauseForProductNotInWarehouse(ex.getCause()))
+                .suppressed(convertSuppressedForProductNotInWarehouse(ex.getSuppressed()))
                 .build();
 
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
@@ -184,6 +204,43 @@ public class GlobalExceptionHandler {
                 .message(throwable.getMessage())
                 .localizedMessage(throwable.getLocalizedMessage())
                 .stackTrace(convertStackTraceForNoProduct(throwable.getStackTrace()))
+                .build();
+    }
+
+    // Методы для ProductInShoppingCartNotInWarehouse
+    private List<ProductInShoppingCartNotInWarehouse.StackTraceElement> convertStackTraceForProductNotInWarehouse(java.lang.StackTraceElement[] stackTrace) {
+        if (stackTrace == null) return Collections.emptyList();
+        return Arrays.stream(stackTrace)
+                .map(this::convertStackTraceElementForProductNotInWarehouse)
+                .collect(Collectors.toList());
+    }
+
+    private ProductInShoppingCartNotInWarehouse.StackTraceElement convertStackTraceElementForProductNotInWarehouse(java.lang.StackTraceElement element) {
+        return ProductInShoppingCartNotInWarehouse.StackTraceElement.builder()
+                .classLoaderName(element.getClassLoaderName())
+                .moduleName(element.getModuleName())
+                .moduleVersion(element.getModuleVersion())
+                .methodName(element.getMethodName())
+                .fileName(element.getFileName())
+                .lineNumber(element.getLineNumber())
+                .className(element.getClassName())
+                .nativeMethod(element.isNativeMethod())
+                .build();
+    }
+
+    private List<ProductInShoppingCartNotInWarehouse.ThrowableCause> convertSuppressedForProductNotInWarehouse(Throwable[] suppressed) {
+        if (suppressed == null || suppressed.length == 0) return Collections.emptyList();
+        return Arrays.stream(suppressed)
+                .map(this::convertThrowableCauseForProductNotInWarehouse)
+                .collect(Collectors.toList());
+    }
+
+    private ProductInShoppingCartNotInWarehouse.ThrowableCause convertThrowableCauseForProductNotInWarehouse(Throwable throwable) {
+        if (throwable == null) return null;
+        return ProductInShoppingCartNotInWarehouse.ThrowableCause.builder()
+                .message(throwable.getMessage())
+                .localizedMessage(throwable.getLocalizedMessage())
+                .stackTrace(convertStackTraceForProductNotInWarehouse(throwable.getStackTrace()))
                 .build();
     }
 
